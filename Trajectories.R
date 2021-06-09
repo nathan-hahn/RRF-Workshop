@@ -1,4 +1,4 @@
-##### Trajectory and Home Range
+##### Trajectory Cleaning and Viz
 ## Nathan Hahn
 
 library(moveVis)
@@ -20,21 +20,35 @@ stork <- df[!df$name %in% c('Muffine', 'Redrunner'),] # remove two individuals
 # create a time object for the tracking times using lubridate package
 stork$timestamp <- lubridate::as_datetime(stork$timestamp) 
 
+
+assign_daynight <- function(df, lat, lon) {
+  require(maptools)
+  
+  # determine sunrise and sunset from coords and timestamp - everything is UTC based! 
+  coords = cbind(lat, lon)
+  sunrise = sunriset(coords, df$timestamp, direction = 'sunrise', POSIXct.out = TRUE)
+  sunset = sunriset(coords, df$timestamp, direction = 'sunset', POSIXct.out = TRUE)
+  
+  # determine day/night
+  day_night = ifelse(df$timestamp >= sunrise$time & df$timestamp < sunset$time, 'day', 'night')
+  df$daynight <- day_night
+  return(df)
+}
+
+stork <- assign_daynight(df = stork, lat = stork$`location-lat`, lon = stork$`location-lon`)
+head(stork)
+
+detach(package:maptools)
+
 # If we want to look at distance components in the trajectory, we need to convert to UTM
 library(sf)
 t <- st_as_sf(stork, coords = c('location-long', 'location-lat'), crs = "+proj=longlat +datum=WGS84")
 t <- st_transform(t, crs = "+proj=utm +zone=32n")
-
-library(magrittr)
 stork <- t %>%
   mutate(x = unlist(map(t$geometry,1)),
          y = unlist(map(t$geometry,2)))
 stork$geometry <- NULL
 #stork
-
-
-#write.csv(stork, 'stork.csv')
-
 
 ##### 2. Create a trajectory - adeHabitatLT
 
@@ -55,7 +69,8 @@ ggplot(stork.ds, aes(x = timestamp, y = lubridate::minute(timestamp))) + geom_po
 ## Make the trajectory - supply the coordinates, date, and id
 library(adehabitatLT)
 stork.traj <- as.ltraj(xy = stork.ds[,c('x', 'y')], date = stork.ds[,'timestamp'], id = stork.ds[,'name'],
-                       typeII = TRUE) # indicates time-based trajectory
+                       typeII = TRUE, # indicates time-based trajectory
+                       infolocs = stork.ds[,c(2,4)]) # keep other info (collar id, covariates, etc.)
 
 # explore the trajectory object -
 stork.traj
@@ -74,7 +89,6 @@ stork.burst <- cutltraj(stork.traj, 'foo(dt)', nextr = TRUE)
 refda <- strptime('2018-06-30 00:00:00', "%Y-%m-%d %H:%M:%S", tz="UTC")   #add ref date
 stork.burst <- setNA(stork.burst, refda, dt = 30, units = 'min')
 
-
 # round the timestamps to make a 'regular' trajectory
 stork.burst <- sett0(stork.burst, refda, 30, units = 'min')
 #stork.burst
@@ -89,10 +103,10 @@ hist.ltraj(stork.burst)
 
 ## Speed 
 
-# step length distribution
+# look at step length distribution
 hist(stork.clean$dist)
 
-# speed over time
+# calculate step lengths over time
 ggplot(stork.clean, aes(x = date, y = dist/1000)) + geom_point() + geom_line() + facet_wrap(.~id) + ylab('km per 30 min') # or dist/1000*2 for km/hr
 
 # !!Are these values biologically reasonable? May want to create an additional filter to remove relocations with very high speeds!!
@@ -132,18 +146,10 @@ library(mapview)
 stork.sf <- st_as_sf(stork.ds, coords = c('x', 'y'), crs = "+proj=utm +zone=32n")
 
 mapview(stork.sf, zcol = 'name', cex = 0.5) # cover zcol, cex
+## TO ADD: Create polylines for mapview
 
-##### 6. Movement states - Probably won't cover this. Very simplified method
-library(mclust)
-t <- stork.clean[!is.na(stork.clean$R2n),]
-t$nsd_diff <- lag(t$R2n) - t$R2n
-t <- t[!is.na(t$nsd_diff),]
-clust <- Mclust(t$R2n, G = 2)
-plot(clust)
+##### 6. Movement states - NOTE: Maybe do this with Chris's data...
 
-t$state <- clust$classification
-stork.sf <- st_as_sf(t, coords = c('x', 'y'), crs = "+proj=utm +zone=32n")
-mapview(stork.sf, zcol = 'state') 
 
 
 
