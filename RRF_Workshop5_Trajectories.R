@@ -150,13 +150,14 @@ library(mapview)
 
 stork.sf <- st_as_sf(stork.ds, coords = c('x', 'y'), crs = "+proj=utm +zone=32n")
 
-mapview(stork.sf, zcol = 'name', cex = 0.5) # cover zcol, cex
+mapview(stork.sf, zcol = 'name', cex = 2) # cover zcol, cex
 ## TO ADD: Create polylines for mapview
 
 ##### 6. Movement states - NOTE: Maybe do this with Chris's data...
 
 
-##### 7. Homerange test
+##### 7. Space use - Brownian Bridge
+# Lets use the move package
 library(move)
 
 t <- move(stork.traj)
@@ -169,9 +170,9 @@ plot(t)
 plot(t, xlab="easting", ylab="northing", type="l", pch=16, lwd=0.5)
 points(t, pch=20, cex=0.5)
 
-# brownian bridge
+# brownian bridge - takes 
 unstacked <- split(t)
-dBB.stork <- brownian.bridge.dyn(t, ext=.85, raster=100, location.error=20)
+dBB.stork <- brownian.bridge.dyn(unstacked$Europa_Europa, ext=.2, raster=500, location.error=20)
 plot(dBB.stork)
 
 # Utilization Distribution
@@ -181,3 +182,13 @@ UD.stork <- getVolumeUD(dBB.stork)
 plot(UD.stork, main="UD and contour lines")
 contour(UD.stork, levels=c(0.5, 0.95), add=TRUE, lwd=c(0.5, 0.5), lty=c(2,1))
 
+# filter the map
+ud95 <- UD.stork
+ud95[ud95>.95] <- NA
+plot(ud95, main="UD95")
+
+# quickly view stopovers in mapview
+mapview(stork.sf[stork.sf$name == 'Europa',], cex = 2) + ud95
+
+# move objects can be transformed into ltraj objects
+stork.ltraj <- as(t,"ltraj")
