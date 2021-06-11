@@ -21,16 +21,21 @@ stork <- df[!df$name %in% c('Muffine', 'Redrunner'),] # remove two individuals
 stork$timestamp <- lubridate::as_datetime(stork$timestamp) 
 
 
+sol = solarpos(cbind(df$`location-lat`, df$`location-long`), df$timestamp)[,2]
+
+
 assign_daynight <- function(df, lat, lon) {
   require(maptools)
   
-  # determine sunrise and sunset from coords and timestamp - everything is UTC based! 
+  # set variables for coords and time
   coords = cbind(lat, lon)
-  sunrise = sunriset(coords, df$timestamp, direction = 'sunrise', POSIXct.out = TRUE)
-  sunset = sunriset(coords, df$timestamp, direction = 'sunset', POSIXct.out = TRUE)
+  time = df$timestamp # locked to UTC
+
+  # calculate the sun elevation from horizon
+  sol = solarpos(coords, time)[,2]
   
-  # determine day/night
-  day_night = ifelse(df$timestamp >= sunrise$time & df$timestamp < sunset$time, 'day', 'night')
+  # determine day/night - elevation of sun below horizon. 0 = sunrise/sunset
+  day_night = ifelse(sol < -6, 'night', 'day') 
   df$daynight <- day_night
   return(df)
 }
@@ -151,9 +156,28 @@ mapview(stork.sf, zcol = 'name', cex = 0.5) # cover zcol, cex
 ##### 6. Movement states - NOTE: Maybe do this with Chris's data...
 
 
+##### 7. Homerange test
+library(move)
+
+t <- move(stork.traj)
+proj4string(t) <- CRS("+proj=utm +zone=32n")
+t
 
 
 
+plot(t)
+plot(t, xlab="easting", ylab="northing", type="l", pch=16, lwd=0.5)
+points(t, pch=20, cex=0.5)
 
+# brownian bridge
+unstacked <- split(t)
+dBB.stork <- brownian.bridge.dyn(t, ext=.85, raster=100, location.error=20)
+plot(dBB.stork)
 
+# Utilization Distribution
+UD.stork <- getVolumeUD(dBB.stork)
+
+# plot and add a contour
+plot(UD.stork, main="UD and contour lines")
+contour(UD.stork, levels=c(0.5, 0.95), add=TRUE, lwd=c(0.5, 0.5), lty=c(2,1))
 
